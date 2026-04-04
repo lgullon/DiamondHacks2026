@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+anthropic
+openai
+git+https://github.com/browser-use/browser-use.git
+langchain-anthropic
+python-multipart
+python-dotenv
