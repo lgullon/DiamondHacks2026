@@ -1,0 +1,85 @@
+FORMBUDDY — FRONTEND UPDATE SUMMARY
+=====================================
+
+WHAT WAS BUILT (Person A — Chrome Extension)
+---------------------------------------------
+
+Tech stack: Plasmo + React + TypeScript + Tailwind CSS v3
+Location: /extension/
+
+FILES ADDED / MODIFIED:
+
+1. extension/package.json
+   - Renamed project to "formbuddy"
+   - Fixed plasmo dependency (was broken workspace:* reference)
+   - Added Tailwind v3, PostCSS, autoprefixer as dev dependencies
+   - Added Chrome permissions: tabs, activeTab, scripting
+   - Added host_permissions: <all_urls> (needed to run on any page)
+
+2. extension/tailwind.config.js  [NEW]
+   - Tailwind v3 config, scans src/**/*.{tsx,ts} for classes
+
+3. extension/postcss.config.js  [NEW]
+   - PostCSS config for Tailwind to work with Plasmo's build
+
+4. extension/src/style.css
+   - Replaced placeholder styles with Tailwind directives (@tailwind base/components/utilities)
+
+5. extension/src/popup.tsx
+   - Replaced default Plasmo placeholder with FormBuddy popup UI
+   - Shows the FormBuddy name + mascot emoji
+   - Has a "Start FormBuddy" button that sends a chrome runtime message
+     to the content script to activate the mascot on the current page
+
+6. extension/src/contents/plasmo.tsx  [NEW — replaces plasmo.ts]
+   - This is the main content script injected into every webpage
+   - Reads all form fields from the page (input, select, textarea) via DOM
+   - Sends fields to POST /analyze-form on the backend
+   - Displays a mascot overlay (bottom-right corner of the page)
+   - Mascot emoji changes state: 🤖 idle / 🤔 thinking / 🎙️ recording / 🗣️ speaking
+   - Records audio via MediaRecorder API, sends to POST /voice-input
+   - Sends transcription to POST /chat, receives reply + fill instructions
+   - Calls POST /speak to get audio back, plays it (falls back to browser TTS if backend unavailable)
+   - Language selector (English / Español / 中文) in the mascot bubble
+   - All styles are self-contained (shadow DOM compatible)
+
+7. extension/src/contents/plasmo.ts  [DELETED]
+   - Was the old placeholder content script, replaced by plasmo.tsx
+
+8. extension/src/newtab.tsx  [DELETED]
+   - Was overriding Chrome's new tab page — removed
+
+9. extension/src/options.tsx  [DELETED]
+   - Unused options page — removed
+
+10. test-form.html  [NEW — in root, not in /extension]
+    - Demo medical patient intake form for the hackathon demo
+    - Contains: text inputs, date picker, dropdowns, radio buttons,
+      checkboxes, and textareas
+    - Includes intentionally complex medical language to test
+      clarification feature (HMO/PPO/EPO, "chief complaint",
+      "inpatient procedure", "primary insurance", etc.)
+
+
+HOW TO RUN THE EXTENSION (Person A)
+-------------------------------------
+1. Open terminal (cmd, not PowerShell) in /extension/
+2. Run: npm run dev
+3. Open Chrome → chrome://extensions
+4. Enable Developer Mode
+5. Click "Load unpacked" → select extension/build/chrome-mv3-dev
+6. Open test-form.html in Chrome
+7. Click the FormBuddy icon in the toolbar → click "Start FormBuddy"
+8. The 🤖 mascot appears bottom-right of the page
+
+
+HOW THE TWO PARTS CONNECT
+---------------------------
+The extension (Person A) calls Person B's FastAPI backend at:
+  http://localhost:8000
+
+Person B needs their server running on port 8000 before the full
+flow works. Without it, the mascot shows a "Can't reach backend"
+warning — that's expected during frontend-only development.
+
+Full API contract is in APIcontract.txt.
