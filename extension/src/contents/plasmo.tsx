@@ -96,6 +96,57 @@ interface Question {
   simplified: string
 }
 
+// --- Translated UI strings ---
+const UI = {
+  en: {
+    listening: "Listening... tap again to stop.",
+    thinking: "Got it, thinking...",
+    btnStop: "🔴 Stop",
+    btnThinking: "⏳ Thinking...",
+    btnSpeaking: "🔊 Speaking...",
+    btnSpeak: "🎤 Speak",
+    fieldOf: (i: number, t: number) => `Field ${i} of ${t}`,
+    done: "All done! Please review your answers and submit the form.",
+    noFields: "I don't see any form fields on this page.",
+    reading: "Reading the form...",
+    noBackend: "⚠️ Can't reach the backend. Make sure it's running on port 8000.",
+    noTranscribe: "⚠️ Couldn't transcribe. Try again.",
+    backendError: "⚠️ Backend error.",
+  },
+  es: {
+    listening: "Escuchando... toca de nuevo para parar.",
+    thinking: "Entendido, pensando...",
+    btnStop: "🔴 Parar",
+    btnThinking: "⏳ Pensando...",
+    btnSpeaking: "🔊 Hablando...",
+    btnSpeak: "🎤 Hablar",
+    fieldOf: (i: number, t: number) => `Campo ${i} de ${t}`,
+    done: "¡Listo! Por favor revisa tus respuestas y envía el formulario.",
+    noFields: "No veo ningún campo de formulario en esta página.",
+    reading: "Leyendo el formulario...",
+    noBackend: "⚠️ No puedo conectar al servidor. Asegúrate de que esté en el puerto 8000.",
+    noTranscribe: "⚠️ No pude transcribir. Intenta de nuevo.",
+    backendError: "⚠️ Error del servidor.",
+  },
+  zh: {
+    listening: "正在聆听……再次点击停止。",
+    thinking: "好的，正在思考……",
+    btnStop: "🔴 停止",
+    btnThinking: "⏳ 思考中……",
+    btnSpeaking: "🔊 播放中……",
+    btnSpeak: "🎤 说话",
+    fieldOf: (i: number, t: number) => `第 ${i} / ${t} 项`,
+    done: "全部完成！请检查您的答案并提交表单。",
+    noFields: "此页面上没有找到表单字段。",
+    reading: "正在读取表单……",
+    noBackend: "⚠️ 无法连接到服务器，请确保其在端口 8000 上运行。",
+    noTranscribe: "⚠️ 无法转录，请重试。",
+    backendError: "⚠️ 服务器错误。",
+  },
+} as const
+
+type LangCode = keyof typeof UI
+
 function readFormFields(): FormField[] {
   const fields = document.querySelectorAll("input, select, textarea")
   return Array.from(fields)
@@ -123,13 +174,11 @@ function readFormFields(): FormField[] {
     .filter((f) => f.label)
 }
 
-// Fill a field directly in the DOM
 function fillFieldInDOM(fieldId: string, value: string): boolean {
   const el = document.getElementById(fieldId) as HTMLInputElement | HTMLSelectElement | null
   if (!el) return false
 
   if (el.tagName === "SELECT") {
-    // Match by value or text (case-insensitive)
     const select = el as HTMLSelectElement
     const lower = value.toLowerCase()
     for (const opt of Array.from(select.options)) {
@@ -139,11 +188,14 @@ function fillFieldInDOM(fieldId: string, value: string): boolean {
         return true
       }
     }
-  } else if (el.getAttribute("type") === "radio") {
-    // Radio: find the radio in the group matching the value
-    const radios = document.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${(el as HTMLInputElement).name}"]`)
+  } else if ((el as HTMLInputElement).type === "radio") {
+    const name = (el as HTMLInputElement).name
+    const radios = document.querySelectorAll<HTMLInputElement>(`input[type="radio"][name="${name}"]`)
     for (const radio of Array.from(radios)) {
-      if (radio.value.toLowerCase() === value.toLowerCase() || radio.parentElement?.textContent?.toLowerCase().includes(value.toLowerCase())) {
+      if (
+        radio.value.toLowerCase() === value.toLowerCase() ||
+        radio.parentElement?.textContent?.toLowerCase().includes(value.toLowerCase())
+      ) {
         radio.checked = true
         radio.dispatchEvent(new Event("change", { bubbles: true }))
         return true
@@ -162,14 +214,14 @@ function Mascot() {
   const [visible, setVisible] = useState(false)
   const [state, setState] = useState<State>("idle")
   const [bubble, setBubble] = useState("")
-  const [language, setLanguage] = useState("en")
+  const [language, setLanguage] = useState<LangCode>("en")
 
-  // Session state
   const questionsRef = useRef<Question[]>([])
   const fieldsRef = useRef<FormField[]>([])
   const currentIndexRef = useRef(0)
   const historyRef = useRef<{ role: string; content: string }[]>([])
-
+  // sessionLang is locked when a session starts — never drifts mid-session
+  const sessionLangRef = useRef<LangCode>("en")
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
@@ -177,15 +229,21 @@ function Mascot() {
     const chromeHandler = (msg: any) => {
       if (msg.type === "START_FORMBUDDY") {
         setVisible(true)
-        startSession()
+        // Read the select element directly — the most reliable source of truth
+        const select = document.querySelector(".lang-select") as HTMLSelectElement | null
+        const lang = (select?.value as LangCode) || language
+        startSession(lang)
       }
     }
     chrome.runtime.onMessage.addListener(chromeHandler)
     return () => chrome.runtime.onMessage.removeListener(chromeHandler)
   }, [language])
 
-  async function startSession() {
-    // Reset session
+  // Every function that talks to the backend receives `lang` as an explicit argument.
+  // No ref reads, no closure captures — the value is always exactly what was passed in.
+
+  async function startSession(lang: LangCode) {
+    sessionLangRef.current = lang          // lock for this session
     questionsRef.current = []
     fieldsRef.current = []
     currentIndexRef.current = 0
@@ -193,105 +251,109 @@ function Mascot() {
 
     const fields = readFormFields()
     if (fields.length === 0) {
-      setBubble("I don't see any form fields on this page.")
+      setBubble(UI[lang].noFields)
       return
     }
     fieldsRef.current = fields
-    setBubble("Reading the form...")
+    setBubble(UI[lang].reading)
     setState("thinking")
 
     try {
       const res = await fetch(`${BACKEND}/analyze-form`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields, language })
+        body: JSON.stringify({ fields, language: lang })
       })
       const data = await res.json()
       questionsRef.current = data.questions || []
       currentIndexRef.current = 0
-      askCurrentQuestion()
+      askCurrentQuestion(lang)
     } catch {
-      setBubble("⚠️ Can't reach the backend. Make sure it's running on port 8000.")
+      setBubble(UI[lang].noBackend)
       setState("idle")
     }
   }
 
-  function askCurrentQuestion() {
+  function askCurrentQuestion(lang: LangCode) {
     const questions = questionsRef.current
     const idx = currentIndexRef.current
     if (idx >= questions.length) {
-      speak("All done! Please review your answers and submit the form.")
+      const doneMsg = UI[lang].done
+      setBubble(doneMsg)
+      speakText(doneMsg, lang)
       return
     }
-    historyRef.current = [] // fresh conversation history per field
+    historyRef.current = []
     const q = questions[idx]
     const total = questions.length
-    setBubble(`(${idx + 1}/${total}) ${q.simplified}`)
-    speakText(q.simplified)
+    setBubble(`${UI[lang].fieldOf(idx + 1, total)}\n${q.simplified}`)
+    speakText(q.simplified, lang)
   }
 
-  async function speakText(text: string) {
+  // Returns a Promise that resolves only after audio finishes — prevents overlap
+  function speakText(text: string, lang: LangCode): Promise<void> {
     setState("speaking")
-    try {
-      const res = await fetch(`${BACKEND}/speak`, {
+    return new Promise((resolve) => {
+      fetch(`${BACKEND}/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, language })
+        body: JSON.stringify({ text, language: lang })
       })
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      audio.onended = () => setState("idle")
-      audio.play()
-    } catch {
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = language === "es" ? "es-ES" : language === "zh" ? "zh-CN" : "en-US"
-      utterance.onend = () => setState("idle")
-      window.speechSynthesis.speak(utterance)
-    }
-  }
-
-  function speak(text: string) {
-    setBubble(text)
-    speakText(text)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const url = URL.createObjectURL(blob)
+          const audio = new Audio(url)
+          audio.onended = () => { setState("idle"); resolve() }
+          audio.onerror  = () => { setState("idle"); resolve() }
+          audio.play()
+        })
+        .catch(() => {
+          const utterance = new SpeechSynthesisUtterance(text)
+          utterance.lang = lang === "es" ? "es-ES" : lang === "zh" ? "zh-CN" : "en-US"
+          utterance.onend  = () => { setState("idle"); resolve() }
+          utterance.onerror = () => { setState("idle"); resolve() }
+          window.speechSynthesis.speak(utterance)
+        })
+    })
   }
 
   async function startRecording() {
+    const lang = sessionLangRef.current
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     chunksRef.current = []
     const mr = new MediaRecorder(stream)
     mediaRecorderRef.current = mr
     mr.ondataavailable = (e) => chunksRef.current.push(e.data)
     mr.onstop = async () => {
-      stream.getTracks().forEach((t) => t.stop())
+      stream.getTracks().forEach((trk) => trk.stop())
       const blob = new Blob(chunksRef.current, { type: "audio/webm" })
-      await sendAudio(blob)
+      await sendAudio(blob, lang)
     }
     mr.start()
     setState("recording")
-    setBubble("Listening... tap again to stop.")
+    setBubble(UI[lang].listening)
   }
 
   function stopRecording() {
     mediaRecorderRef.current?.stop()
     setState("thinking")
-    setBubble("Got it, thinking...")
+    setBubble(UI[sessionLangRef.current].thinking)
   }
 
-  async function sendAudio(blob: Blob) {
+  async function sendAudio(blob: Blob, lang: LangCode) {
     const form = new FormData()
     form.append("audio", blob, "audio.webm")
     try {
       const res = await fetch(`${BACKEND}/voice-input`, { method: "POST", body: form })
       const { transcription } = await res.json()
-      await sendChat(transcription)
+      await sendChat(transcription, lang)
     } catch {
-      setBubble("⚠️ Couldn't transcribe. Try again.")
+      setBubble(UI[lang].noTranscribe)
       setState("idle")
     }
   }
 
-  async function sendChat(userMessage: string) {
+  async function sendChat(userMessage: string, lang: LangCode) {
     setState("thinking")
     const questions = questionsRef.current
     const fields = fieldsRef.current
@@ -299,7 +361,6 @@ function Mascot() {
     const currentQuestion = questions[idx]
     const currentField = fields.find((f) => f.id === currentQuestion?.id)
 
-    // Add user message to history
     historyRef.current = [...historyRef.current, { role: "user", content: userMessage }]
 
     try {
@@ -312,29 +373,26 @@ function Mascot() {
           field_type: currentField?.type,
           field_options: currentField?.options,
           user_message: userMessage,
-          language,
-          conversation_history: historyRef.current.slice(0, -1) // all but the last (just added)
+          language: lang,
+          conversation_history: historyRef.current.slice(0, -1)
         })
       })
       const data = await res.json()
 
-      // Add assistant reply to history
       historyRef.current = [...historyRef.current, { role: "assistant", content: data.reply }]
 
       if (data.ready_to_fill && data.fill_value && currentQuestion) {
-        // Fill the field directly in the DOM
         fillFieldInDOM(currentQuestion.id, data.fill_value)
-        speak(data.reply || "Got it, filled that in!")
-        // Move to next question after a short pause
-        setTimeout(() => {
-          currentIndexRef.current += 1
-          askCurrentQuestion()
-        }, 2000)
+        setBubble(data.reply)
+        await speakText(data.reply, lang)   // wait for audio, then next question
+        currentIndexRef.current += 1
+        askCurrentQuestion(lang)
       } else {
-        speak(data.reply)
+        setBubble(data.reply)
+        speakText(data.reply, lang)
       }
     } catch {
-      setBubble("⚠️ Backend error.")
+      setBubble(UI[lang].backendError)
       setState("idle")
     }
   }
@@ -348,33 +406,40 @@ function Mascot() {
 
   const idx = currentIndexRef.current
   const total = questionsRef.current.length
+  const ui = UI[language]
 
   return (
     <div className="mascot-wrapper">
       {bubble && (
         <div className="bubble">
           {total > 0 && (
-            <div className="progress">
-              Field {Math.min(idx + 1, total)} of {total}
-            </div>
+            <div className="progress">{ui.fieldOf(Math.min(idx + 1, total), total)}</div>
           )}
-          <p style={{ margin: 0 }}>{bubble}</p>
+          <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{bubble}</p>
           <button
             className={`mic-btn ${state === "recording" ? "recording" : ""}`}
             disabled={state === "thinking" || state === "speaking"}
             onClick={handleMicClick}>
             {state === "recording"
-              ? "🔴 Stop"
+              ? ui.btnStop
               : state === "thinking"
-                ? "⏳ Thinking..."
+                ? ui.btnThinking
                 : state === "speaking"
-                  ? "🔊 Speaking..."
-                  : "🎤 Speak"}
+                  ? ui.btnSpeaking
+                  : ui.btnSpeak}
           </button>
           <select
             className="lang-select"
             value={language}
-            onChange={(e) => setLanguage(e.target.value)}>
+            onChange={(e) => {
+              const newLang = e.target.value as LangCode
+              setLanguage(newLang)
+              sessionLangRef.current = newLang
+              // If a session is already running, restart it in the new language
+              if (questionsRef.current.length > 0 || fieldsRef.current.length > 0) {
+                startSession(newLang)
+              }
+            }}>
             <option value="en">English</option>
             <option value="es">Español</option>
             <option value="zh">中文</option>
@@ -384,7 +449,7 @@ function Mascot() {
       <div
         className="face"
         onClick={() => {
-          if (!bubble) startSession()
+          if (!bubble) startSession(language)
           else setBubble("")
         }}>
         {state === "thinking" ? "🤔" : state === "recording" ? "🎙️" : state === "speaking" ? "🗣️" : "🤖"}

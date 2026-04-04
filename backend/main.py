@@ -94,7 +94,8 @@ async def analyze_form(req: AnalyzeFormRequest):
     )
 
     prompt = f"""You are a helpful assistant for a medical form.
-For each form field below, write a simplified, friendly question in {lang_name} that a non-native speaker can easily understand.
+For each form field below, write a simplified, friendly question in {lang_name}.
+CRITICAL: Every single word of every "simplified" value MUST be in {lang_name} only. Never use English or any other language unless {lang_name} is English.
 Be concise and clear. If the field has options, mention them briefly.
 
 Fields:
@@ -102,7 +103,7 @@ Fields:
 
 Respond ONLY with a JSON array like:
 [
-  {{"id": "<field_id>", "simplified": "<simplified question in {lang_name}>"}},
+  {{"id": "<field_id>", "simplified": "<simplified question written entirely in {lang_name}>"}},
   ...
 ]"""
 
@@ -156,15 +157,17 @@ async def chat(req: ChatRequest):
 
     system_prompt = f"""You are FormBuddy, a kind and patient assistant helping someone fill out a form.
 You are helping with the field: "{req.field_label or req.field_id}" (type: {req.field_type or "text"}).{options_hint}
-Always respond in {lang_name}.
+
+CRITICAL LANGUAGE RULE: The "reply" field MUST be written entirely in {lang_name}. Every single word. Never mix in English or any other language unless {lang_name} is English. The user only understands {lang_name}.
 
 Your job:
 1. If the user's message is a clear answer to the field, set ready_to_fill=true and provide fill_value in plain English (suitable for the form).
 2. If the user is asking a follow-up question or seems confused, answer helpfully and set ready_to_fill=false.
 3. Keep replies short and friendly.
+4. fill_value is always in English regardless of language (it goes into the form).
 
 Always respond in this exact JSON format:
-{{"reply": "<your response in {lang_name}>", "ready_to_fill": true/false, "fill_value": "<english value or null>"}}"""
+{{"reply": "<your response written entirely in {lang_name}>", "ready_to_fill": true/false, "fill_value": "<english value or null>"}}"""
 
     messages = req.conversation_history + [{"role": "user", "content": req.user_message}]
 
