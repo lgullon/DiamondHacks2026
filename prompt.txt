@@ -1,0 +1,140 @@
+This is my first ever hackathon. I am in a team of two, neither of us have ever done a hackathon. this is a 24 hour diamondhacks hackathon We NEED to incorporate brosweruse into our product to enter the borsweruse track. Here is the idea. If you are filling out a form (perhaps medical and more complicated), but your first language isn't english, it might be difficult. We want to make an extension that opens a small mascot in the corner of your screen, reads the form question aloud to you one by one in simplified terms in your language, you respond or ask a follow up question. Then it can clarify your questions, record your final response, and then fills the field out right in front of your eyes in english. Then you can submit when done. Scope: - we need an english option, spanish, chinese - works specifically on HTML forms - Can fill selection boxes, tedxt unput, or any basic html - you can only sdpeak to it, but when it responds it writes and speaks its response for accessibility - MUST use brosweruse - would prefer that you can ask clarifying questions and ask to explain complicated questions For the demo we can curate a specific form so that we know it works and demonstrates what we want. The flow is probably going to follow this: extension: - plasmo with react + tailwind css v3 (v4 doesnt work) - backend API: fastAPI (you’ll need routes, such as /submit-form or /voice or etc etc (you can imagine your APIs are your minecraft command blocks)   - create questiosn to send using anthropic API - voice input: liveKit, or OpenAI whisper, maybe ElevenLabs, not sure exactly what it does but it was mentioned by the sponsor - browser automation: browser use cli - have your api make these cli commands - to read the page: pure cdp calls (ask claude, extensions have the most permissions for accessing any page you’re on) We need to know how to split the work, where to start, best vibe coding practice, etc. What should our plan be?Afficher moins11:23 AMDiamondHacks: FormBuddy 🧑‍💻
+This is a fantastic first hackathon idea — it's practical, accessible, and has a clear demo path. Let me break down everything you need.
+
+The Big Picture Architecture
+Before splitting work, understand how the pieces connect:
+[Chrome Extension (Plasmo + React)]
+        ↕ CDP (reads form fields)
+        ↕ HTTP (talks to your backend)
+[FastAPI Backend]
+        ↕ Anthropic API (understands + simplifies questions)
+        ↕ Whisper/ElevenLabs (voice in/out)
+        ↕ Browser Use CLI (fills the form)
+The extension is the face. The backend is the brain. Browser Use is the hands.
+
+Work Split
+Person A — Extension ("The Face") and Person B — Backend ("The Brain") can work almost entirely in parallel after the first hour.
+Person A: Extension
+
+Set up Plasmo project, get a sidebar/popup rendering
+Build the mascot UI (animated character in corner)
+Implement CDP calls to read form fields from the page
+Record audio → send to backend → play back audio response
+Trigger backend to fill fields via browser use
+
+Person B: Backend
+
+Set up FastAPI with all routes stubbed out
+Integrate Anthropic API to simplify form questions + handle conversation
+Integrate Whisper for speech-to-text
+Integrate ElevenLabs for text-to-speech
+Integrate Browser Use to fill fields
+
+
+The API Routes (Your Command Blocks)
+pythonPOST /analyze-form        # receives form fields JSON, returns simplified questions
+POST /voice-input         # receives audio blob, returns transcribed text  
+POST /chat                # receives user message + context, returns AI response + fill instruction
+POST /fill-field          # triggers browser use to fill a specific field
+POST /speak               # converts text to speech, returns audio
+
+The Conversation Flow (State Machine)
+1. User clicks mascot → extension reads all form fields via CDP
+2. Extension sends fields to /analyze-form → backend returns simplified Q&A list
+3. For each field:
+   a. Backend calls /speak with simplified question → plays audio to user
+   b. User speaks → extension sends audio to /voice-input → transcription returned
+   c. Transcription sent to /chat → Claude determines: answer or follow-up question?
+   d. If follow-up: loop back to (b)
+   e. If answer: call /fill-field → browser use fills it → move to next field
+4. User reviews → clicks submit
+
+Day-of Timeline (24 hours)
+TimePerson A (Extension)Person B (Backend)Hour 0–1Together: set up repos, agree on API contract (exact request/response shapes)SameHour 1–4Plasmo setup, mascot renders on page, CDP reads form fieldsFastAPI skeleton, all routes returning mock data, Anthropic integrationHour 4–8Audio recording in browser, sends to backend, plays response backWhisper + ElevenLabs working end to end, /chat fully functionalHour 8–14Full conversation loop working with mock backendBrowser Use filling fields on the demo formHour 14–20Polish mascot UI, animations, language switchingError handling, multi-language prompts, end-to-end testingHour 20–23Run the full demo form 10+ times, fix bugsSameHour 23–24Slides, rehearse demoSame
+
+Your Demo Form Strategy
+Build a simple HTML form with these field types to show range:
+
+A text input (name, date of birth)
+A <select> dropdown (insurance type, language preference)
+Radio buttons (yes/no questions like "Do you have allergies?")
+A textarea (describe your symptoms)
+
+Host it as a simple index.html on localhost or GitHub Pages. You control it completely, so you can make sure Browser Use fills it perfectly every time.
+
+Code Starting Points
+Plasmo extension setup (Person A, Hour 1):
+bashnpm create plasmo my-extension
+cd my-extension
+npm install
+# Add tailwind v3 specifically:
+npm install -D tailwindcss@3 postcss autoprefixer
+FastAPI skeleton (Person B, Hour 1):
+bashpip install fastapi uvicorn anthropic openai elevenlabs browser-use python-multipart
+uvicorn main:app --reload
+CDP to read form fields (Person A):
+javascript// In your content script
+const fields = document.querySelectorAll('input, select, textarea')
+const fieldData = Array.from(fields).map(el => ({
+  id: el.id || el.name,
+  type: el.type,
+  label: document.querySelector(`label[for="${el.id}"]`)?.innerText,
+  options: el.tagName === 'SELECT' ? Array.from(el.options).map(o => o.text) : null
+}))
+// Send fieldData to your backend
+Browser Use fill command (Person B):
+pythonfrom browser_use import Agent
+import asyncio
+
+async def fill_field(field_id: str, value: str):
+    agent = Agent(
+        task=f"Fill the form field with id '{field_id}' with the value '{value}'",
+        llm=your_llm
+    )
+    await agent.run()
+
+Vibe Coding Tips for First Hackathons
+
+Agree on your API contract in Hour 1 and don't change field names. Person A mocks Person B's responses and vice versa — you stay unblocked.
+Get something end-to-end ugly working by Hour 8. No mascot animation, no multilingual — just: reads field → asks question → fills it. Then layer on features.
+The demo form is your safety net. If browser use is flaky on random sites, that's fine. Your curated form should work perfectly every time.
+Stub aggressively. If ElevenLabs is taking too long to integrate, have the backend return text and use the browser's built-in speechSynthesis API as a fallback.
+One laptop runs the demo. Decide now whose laptop it is, get everything running on it by Hour 20.
+Name your mascot. It makes the demo memorable. Judges remember "FormBuddy" or "Lingo" way longer than "our extension."
+
+
+The One Risk to Manage
+Browser Use needs to control the browser — but you're also running a Chrome extension. These can conflict. The safest pattern: Browser Use runs in a separate Chrome profile or via Playwright in the backend, while your extension just reads fields via CDP and triggers the backend. Don't have both trying to control the same tab simultaneously.
+Good luck — this idea is genuinely useful and very demo-able. You've got this! 🚀excerpt_from_previous_claude_message.txt1 lignetxtwhat does this mean and can you help with it?12:09 PM"API contract" just means agreeing on the exact shape of data that Person A and Person B will send back and forth — before either of you has built anything real.
+It's like agreeing on a plug shape before one person builds the outlet and the other builds the appliance. If you agree upfront, you can both build independently without constantly waiting on each other.
+
+Concretely, here's your API contract:
+Both of you open a shared doc (Google Doc, Notion, whatever) and write something like this on Day 1:
+POST /analyze-form
+json// Person A sends:
+{
+  "fields": [
+    { "id": "dob", "type": "text", "label": "Date of Birth" },
+    { "id": "insurance", "type": "select", "label": "Insurance Type", "options": ["HMO", "PPO", "None"] }
+  ],
+  "language": "es"
+}
+
+// Person B returns:
+{
+  "questions": [
+    { "id": "dob", "simplified": "¿Cuándo naciste? (ejemplo: 15 de marzo, 1990)" },
+    { "id": "insurance", "simplified": "¿Qué tipo de seguro médico tienes?" }
+  ]
+}
+POST /chat
+json// Person A sends:
+{ "field_id": "dob", "user_message": "what does date of birth mean?", "language": "es" }
+
+// Person B returns:
+{ "reply": "Es la fecha en que naciste.", "ready_to_fill": false, "fill_value": null }
+// OR when they give a real answer:
+{ "reply": "Perfecto, voy a escribir eso.", "ready_to_fill": true, "fill_value": "03/15/1990" }
+
+Once you both agree on this, Person A can just hardcode fake responses that match the shape, and build the whole UI/audio flow. Person B builds the real logic independently. When you connect at Hour 8, it just works — because the "plug shape" already matches.
+The most common first-hackathon mistake is skipping this and then spending 3 hours debugging because one person returns user_text and the other is reading transcription. Agree on field names first!
