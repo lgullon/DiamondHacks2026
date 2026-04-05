@@ -1,4 +1,47 @@
 const PANEL_ID = "texttutor-panel";
+
+const LOADING_PHRASES = [
+  "Preheating the oven...",
+  "Mixing the dough...",
+  "Sprinkling in chocolate chips...",
+  "Arranging the baking tray...",
+  "Savoring the taste...",
+];
+
+function randomLoadingPhrase() {
+  return LOADING_PHRASES[Math.floor(Math.random() * LOADING_PHRASES.length)];
+}
+
+// ── Shared header HTML ─────────────────────────────────────────────────────
+
+function headerHTML() {
+  return `
+    <div class="tt-header">
+      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
+      <div class="tt-header-right">
+        <button class="tt-mynotes-btn">My Notes</button>
+        <button class="tt-close" title="Close">✕</button>
+      </div>
+    </div>
+  `;
+}
+
+function wireHeader(panel) {
+  panel.querySelector(".tt-close").addEventListener("click", removePanel);
+  panel.querySelector(".tt-mynotes-btn").addEventListener("click", () => renderMyNotesView(panel));
+  makeDraggable(panel, panel.querySelector(".tt-header"));
+  makeResizable(panel);
+}
+
+// ── Notes storage ──────────────────────────────────────────────────────────
+
+function saveNotes(topic, bullets) {
+  chrome.storage.local.get({ smartcookie_notes: [] }, (result) => {
+    const notes = result.smartcookie_notes;
+    notes.unshift({ id: Date.now(), topic, bullets, savedAt: new Date().toLocaleDateString() });
+    chrome.storage.local.set({ smartcookie_notes: notes });
+  });
+}
 const MIN_CHARS = 20;   // ignore tiny selections
 const MAX_CHARS = 1500; // cap request size
 
@@ -29,24 +72,35 @@ function createChipAnim() {
 }
 
 let debounceTimer = null;
+let _lastMouseDownInPanel = false;
 
-document.addEventListener("mouseup", (e) => {
-  // Ignore clicks inside the panel itself
+// Track whether the user clicked inside our panel so we never close it
+// just because the click cleared the page text selection.
+document.addEventListener("mousedown", (e) => {
   const panel = document.getElementById(PANEL_ID);
-  if (panel && panel.contains(e.target)) return;
+  _lastMouseDownInPanel = !!(panel && panel.contains(e.target));
+}, true);
 
+document.addEventListener("selectionchange", () => {
   clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => handleSelection(), 300);
+  debounceTimer = setTimeout(() => handleSelection(), 1000);
 });
 
 function handleSelection() {
   const selection = window.getSelection();
   if (!selection) return;
 
+  // Never react to selections made inside our panel (e.g. reading bullet points)
+  const panel = document.getElementById(PANEL_ID);
+  if (panel && selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    if (panel.contains(range.commonAncestorContainer)) return;
+  }
+
   const text = selection.toString().trim();
   if (text.length < MIN_CHARS) {
-    // Small or empty selection — close any open panel
-    removePanel();
+    // Small or empty selection — only close if the user clicked outside the panel
+    if (!_lastMouseDownInPanel) removePanel();
     return;
   }
 
@@ -70,12 +124,9 @@ function showLoadingPanel(selectionRect) {
 
   const panel = createPanelShell();
   panel.innerHTML = `
-    <div class="tt-header">
-      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
-      <button class="tt-close" title="Close">✕</button>
-    </div>
+    ${headerHTML()}
     <div class="tt-loading">
-      <span>Finding the best explanation…</span>
+      <span>${randomLoadingPhrase()}</span>
     </div>
   `;
 
@@ -85,9 +136,7 @@ function showLoadingPanel(selectionRect) {
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
-  panel.querySelector(".tt-close").addEventListener("click", removePanel);
-  makeDraggable(panel, panel.querySelector(".tt-header"));
-  makeResizable(panel);
+  wireHeader(panel);
 }
 
 function videoEmbedUrl(video) {
@@ -123,6 +172,7 @@ function renderSingleView(panel, video, videos, text) {
     <div class="tt-footer">
       <button class="tt-show-more">Show more videos ▾</button>
       <button class="tt-notes-btn">Notes</button>
+      <button class="tt-quiz-btn">Quiz</button>
     </div>
   `;
 
@@ -145,6 +195,7 @@ function renderSingleView(panel, video, videos, text) {
 
   body.querySelector(".tt-show-more").addEventListener("click", () => renderListView(panel, videos, text));
   body.querySelector(".tt-notes-btn").addEventListener("click", () => renderNotesView(panel, video, videos, text));
+  body.querySelector(".tt-quiz-btn").addEventListener("click", () => renderQuizView(panel, video, videos, text));
 }
 
 function renderListView(panel, videos, text) {
@@ -193,7 +244,7 @@ function renderNotesView(panel, video, videos, text) {
   loadingDiv.className = "tt-notes-loading";
   const chipAnim = createChipAnim();
   const loadingText = document.createElement("span");
-  loadingText.textContent = "Generating notes…";
+  loadingText.textContent = randomLoadingPhrase();
   loadingDiv.appendChild(chipAnim);
   loadingDiv.appendChild(loadingText);
   inner.appendChild(loadingDiv);
@@ -241,13 +292,241 @@ function renderNotesView(panel, video, videos, text) {
 
     const footer = document.createElement("div");
     footer.className = "tt-footer";
+
     const closeBtn = document.createElement("button");
     closeBtn.className = "tt-notes-btn";
     closeBtn.textContent = "Close notes";
     footer.appendChild(closeBtn);
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "tt-save-notes-btn";
+    saveBtn.textContent = "Save notes";
+    footer.appendChild(saveBtn);
+
     inner.appendChild(footer);
 
     closeBtn.addEventListener("click", closeNotes);
+
+    saveBtn.addEventListener("click", () => {
+      if (saveBtn.classList.contains("saved")) return;
+      const bullets = response && response.data ? response.data.bullets : [];
+      saveNotes(video.title, bullets);
+      saveBtn.textContent = "Saved!";
+      saveBtn.classList.add("saved");
+    });
+  });
+}
+
+function renderQuizView(panel, video, videos, text) {
+  // Always write an explicit pixel height so the quiz's height:100% chain resolves
+  // correctly. When notes are open the panel height is flex-driven (no style.height),
+  // which causes height:100% inside the quiz to collapse to 0.
+  panel.style.height = Math.max(420, panel.offsetHeight) + "px";
+
+  const vidIdMatch = video.embed_url.match(/embed\/([^?&]+)/);
+  const videoId = vidIdMatch ? vidIdMatch[1] : "";
+
+  const view = document.createElement("div");
+  view.className = "tt-quiz-view";
+
+  const header = document.createElement("div");
+  header.className = "tt-quiz-header";
+  header.textContent = "Chip's Quiz";
+  view.appendChild(header);
+
+  const loadingDiv = document.createElement("div");
+  loadingDiv.className = "tt-loading";
+  const chipAnim = createChipAnim();
+  const loadingText = document.createElement("span");
+  loadingText.textContent = randomLoadingPhrase();
+  loadingDiv.appendChild(chipAnim);
+  loadingDiv.appendChild(loadingText);
+  view.appendChild(loadingDiv);
+
+  swapPanelBody(panel, view);
+
+  chrome.runtime.sendMessage({ type: "GET_QUIZ", text, video_id: videoId }, (response) => {
+    chipAnim._stopAnim();
+    view.innerHTML = "";
+    view.appendChild(header);
+
+    if (chrome.runtime.lastError || !response || response.error) {
+      const err = document.createElement("div");
+      err.className = "tt-error";
+      err.textContent = "Could not generate quiz. Try again.";
+      view.appendChild(err);
+    } else {
+      const questions = response.data.questions || [];
+      let score = 0;
+      let answered = 0;
+
+      const questionsWrap = document.createElement("div");
+      questionsWrap.className = "tt-quiz-questions";
+
+      const scoreEl = document.createElement("div");
+      scoreEl.className = "tt-quiz-score";
+      scoreEl.textContent = `Score: 0 / ${questions.length}`;
+
+      questions.forEach((q, qi) => {
+        const qEl = document.createElement("div");
+        qEl.className = "tt-quiz-question";
+
+        const qText = document.createElement("p");
+        qText.className = "tt-quiz-q-text";
+        qText.textContent = `${qi + 1}. ${q.question}`;
+        qEl.appendChild(qText);
+
+        const optsEl = document.createElement("div");
+        optsEl.className = "tt-quiz-options";
+
+        q.options.forEach((opt) => {
+          const letter = opt.charAt(0);
+          const optEl = document.createElement("div");
+          optEl.className = "tt-quiz-option";
+          optEl.textContent = opt;
+
+          optEl.addEventListener("click", () => {
+            if (qEl.dataset.answered) return;
+            qEl.dataset.answered = "1";
+            answered++;
+
+            if (letter === q.answer) {
+              optEl.classList.add("correct");
+              score++;
+            } else {
+              optEl.classList.add("incorrect");
+              // highlight the correct one
+              optsEl.querySelectorAll(".tt-quiz-option").forEach((o) => {
+                if (o.textContent.charAt(0) === q.answer) o.classList.add("correct");
+              });
+            }
+            scoreEl.textContent = `Score: ${score} / ${questions.length}`;
+          });
+
+          optsEl.appendChild(optEl);
+        });
+
+        qEl.appendChild(optsEl);
+        questionsWrap.appendChild(qEl);
+      });
+
+      view.appendChild(questionsWrap);
+      view.appendChild(scoreEl);
+    }
+
+    const footer = document.createElement("div");
+    footer.className = "tt-footer";
+    const backBtn = document.createElement("button");
+    backBtn.className = "tt-back-btn";
+    backBtn.textContent = "← Back to video";
+    footer.appendChild(backBtn);
+    view.appendChild(footer);
+
+    backBtn.addEventListener("click", () => renderSingleView(panel, video, videos, text));
+  });
+}
+
+function renderMyNotesView(panel) {
+  const panelRow = panel.querySelector(".tt-panel-row");
+
+  // If My Notes is already open, do nothing
+  if (panel.querySelector(".tt-mynotes-view")) return;
+
+  // Preserve current height so the panel doesn't collapse
+  panel.style.height = Math.max(300, panel.offsetHeight) + "px";
+
+  chrome.storage.local.get({ smartcookie_notes: [] }, (result) => {
+    const allNotes = result.smartcookie_notes;
+
+    const view = document.createElement("div");
+    view.className = "tt-mynotes-view";
+
+    const header = document.createElement("div");
+    header.className = "tt-quiz-header";
+    header.textContent = "My Saved Notes";
+    view.appendChild(header);
+
+    const content = document.createElement("div");
+    content.className = "tt-mynotes-content";
+
+    if (allNotes.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "tt-mynotes-empty";
+      empty.textContent = "No saved notes yet. Generate notes on any highlighted text and click \"Save notes\" to keep them here.";
+      content.appendChild(empty);
+    } else {
+      // Group by topic (video title)
+      const grouped = {};
+      allNotes.forEach(entry => {
+        if (!grouped[entry.topic]) grouped[entry.topic] = [];
+        grouped[entry.topic].push(entry);
+      });
+
+      Object.entries(grouped).forEach(([topic, entries]) => {
+        const section = document.createElement("div");
+        section.className = "tt-mynotes-section";
+
+        const topicEl = document.createElement("div");
+        topicEl.className = "tt-mynotes-topic";
+        const topicText = document.createElement("span");
+        topicText.textContent = topic;
+        const arrow = document.createElement("span");
+        arrow.className = "tt-mynotes-topic-arrow";
+        arrow.textContent = "▶";
+        topicEl.appendChild(topicText);
+        topicEl.appendChild(arrow);
+        section.appendChild(topicEl);
+
+        const entriesWrap = document.createElement("div");
+        entriesWrap.className = "tt-mynotes-entries";
+
+        entries.forEach(entry => {
+          const entryEl = document.createElement("div");
+          entryEl.className = "tt-mynotes-entry";
+
+          const dateEl = document.createElement("div");
+          dateEl.className = "tt-mynotes-date";
+          dateEl.textContent = entry.savedAt;
+          entryEl.appendChild(dateEl);
+
+          const list = document.createElement("ul");
+          list.className = "tt-mynotes-bullets";
+          entry.bullets.forEach(b => {
+            const li = document.createElement("li");
+            li.textContent = b;
+            list.appendChild(li);
+          });
+          entryEl.appendChild(list);
+          entriesWrap.appendChild(entryEl);
+        });
+
+        section.appendChild(entriesWrap);
+
+        topicEl.addEventListener("click", () => section.classList.toggle("open"));
+
+        content.appendChild(section);
+      });
+    }
+
+    view.appendChild(content);
+
+    const footer = document.createElement("div");
+    footer.className = "tt-footer";
+    const backBtn = document.createElement("button");
+    backBtn.className = "tt-back-btn";
+    backBtn.textContent = "← Back";
+    footer.appendChild(backBtn);
+    view.appendChild(footer);
+
+    // Replace the entire panel row so My Notes spans the full width
+    if (panelRow) {
+      panelRow.replaceWith(view);
+      backBtn.addEventListener("click", () => view.replaceWith(panelRow));
+    } else {
+      // Fallback for loading panel (no panel row yet)
+      panel.appendChild(view);
+      backBtn.addEventListener("click", () => view.remove());
+    }
   });
 }
 
@@ -256,10 +535,7 @@ function showVideoPanel(selectionRect, videos, text) {
 
   const panel = createPanelShell();
   panel.innerHTML = `
-    <div class="tt-header">
-      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
-      <button class="tt-close" title="Close">✕</button>
-    </div>
+    ${headerHTML()}
     <div class="tt-panel-row">
       <div class="tt-video-col">
         <div class="tt-body"></div>
@@ -270,9 +546,7 @@ function showVideoPanel(selectionRect, videos, text) {
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
-  panel.querySelector(".tt-close").addEventListener("click", removePanel);
-  makeDraggable(panel, panel.querySelector(".tt-header"));
-  makeResizable(panel);
+  wireHeader(panel);
 
   renderSingleView(panel, videos[0], videos, text);
 }
@@ -282,18 +556,13 @@ function showErrorPanel(selectionRect, message) {
 
   const panel = createPanelShell();
   panel.innerHTML = `
-    <div class="tt-header">
-      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
-      <button class="tt-close" title="Close">✕</button>
-    </div>
+    ${headerHTML()}
     <div class="tt-error">${escapeHtml(message)}</div>
   `;
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
-  panel.querySelector(".tt-close").addEventListener("click", removePanel);
-  makeDraggable(panel, panel.querySelector(".tt-header"));
-  makeResizable(panel);
+  wireHeader(panel);
 }
 
 function makeResizable(panel) {
