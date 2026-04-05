@@ -1,4 +1,16 @@
 const PANEL_ID = "texttutor-panel";
+
+const LOADING_PHRASES = [
+  "Preheating the oven...",
+  "Mixing the dough...",
+  "Sprinkling in chocolate chips...",
+  "Arranging the baking tray...",
+  "Savoring the taste...",
+];
+
+function randomLoadingPhrase() {
+  return LOADING_PHRASES[Math.floor(Math.random() * LOADING_PHRASES.length)];
+}
 const MIN_CHARS = 20;   // ignore tiny selections
 const MAX_CHARS = 1500; // cap request size
 
@@ -86,7 +98,7 @@ function showLoadingPanel(selectionRect) {
       <button class="tt-close" title="Close">✕</button>
     </div>
     <div class="tt-loading">
-      <span>Finding the best explanation…</span>
+      <span>${randomLoadingPhrase()}</span>
     </div>
   `;
 
@@ -206,7 +218,7 @@ function renderNotesView(panel, video, videos, text) {
   loadingDiv.className = "tt-notes-loading";
   const chipAnim = createChipAnim();
   const loadingText = document.createElement("span");
-  loadingText.textContent = "Generating notes…";
+  loadingText.textContent = randomLoadingPhrase();
   loadingDiv.appendChild(chipAnim);
   loadingDiv.appendChild(loadingText);
   inner.appendChild(loadingDiv);
@@ -265,6 +277,11 @@ function renderNotesView(panel, video, videos, text) {
 }
 
 function renderQuizView(panel, video, videos, text) {
+  // Always write an explicit pixel height so the quiz's height:100% chain resolves
+  // correctly. When notes are open the panel height is flex-driven (no style.height),
+  // which causes height:100% inside the quiz to collapse to 0.
+  panel.style.height = Math.max(420, panel.offsetHeight) + "px";
+
   const vidIdMatch = video.embed_url.match(/embed\/([^?&]+)/);
   const videoId = vidIdMatch ? vidIdMatch[1] : "";
 
@@ -280,7 +297,7 @@ function renderQuizView(panel, video, videos, text) {
   loadingDiv.className = "tt-loading";
   const chipAnim = createChipAnim();
   const loadingText = document.createElement("span");
-  loadingText.textContent = "Generating quiz…";
+  loadingText.textContent = randomLoadingPhrase();
   loadingDiv.appendChild(chipAnim);
   loadingDiv.appendChild(loadingText);
   view.appendChild(loadingDiv);

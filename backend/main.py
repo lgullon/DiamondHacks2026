@@ -227,9 +227,9 @@ def get_quiz(body: QuizRequest):
         transcript_section = f"\n\nFor additional context, here is part of a video transcript on this topic:\n{transcript_text}"
 
     char_count = len(body.text)
-    if char_count < 200:
+    if char_count < 1000:
         n_questions = 3
-    elif char_count < 600:
+    elif char_count < 2000:
         n_questions = 5
     else:
         n_questions = 8
