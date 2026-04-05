@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TextTutor</title>
+  <title>SmartCookie</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -15,17 +15,19 @@
     }
 
     .header {
-      background: #1a56db;
-      color: white;
+      background: #fdf6ec;
+      color: #3d2b1f;
       padding: 16px;
       display: flex;
       align-items: center;
       gap: 10px;
+      border-bottom: 1px solid #e8d9c4;
     }
 
     .header-icon {
-      font-size: 24px;
-      line-height: 1;
+      height: 32px;
+      width: 32px;
+      object-fit: contain;
     }
 
     .header-text h1 {
@@ -35,7 +37,7 @@
 
     .header-text p {
       font-size: 11px;
-      opacity: 0.85;
+      opacity: 0.7;
       margin-top: 2px;
     }
 
@@ -109,9 +111,9 @@
 </head>
 <body>
   <div class="header">
-    <div class="header-icon">▶</div>
+    <img class="header-icon" src="mainChip.png" alt="Chip" />
     <div class="header-text">
-      <h1>TextTutor</h1>
+      <h1>SmartCookie</h1>
       <p>Video explanations on demand</p>
     </div>
   </div>

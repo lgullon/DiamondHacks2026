@@ -211,10 +211,45 @@ def best_timestamp(text: str, transcript: list) -> int:
         return 0
 
 
+class NotesRequest(BaseModel):
+    text: str
+    video_id: str
+
+
+@app.post("/api/notes")
+def get_notes(body: NotesRequest):
+    transcript = fetch_transcript(body.video_id)
+
+    transcript_section = ""
+    if transcript:
+        transcript_text = " ".join(e["text"] for e in transcript[:400])
+        transcript_section = f"\n\nHere is the transcript of an educational video on this topic:\n{transcript_text}"
+
+    message = claude.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f'A student highlighted this passage from their textbook:\n"{body.text}"'
+                    f"{transcript_section}\n\n"
+                    "Write concise bullet points that summarize the key concepts from the passage "
+                    "and fill in any gaps or clarifications using the video transcript where helpful. "
+                    "Return ONLY the bullet points, one per line, each starting with '•'. No headers."
+                ),
+            }
+        ],
+    )
+    raw = message.content[0].text.strip()
+    bullets = [line.lstrip("•–-* ").strip() for line in raw.splitlines() if line.strip()]
+    return {"bullets": bullets}
+
+
 @app.get("/")
 def health():
     logger.info("Health check hit")
-    return {"status": "ok", "service": "TextTutor"}
+    return {"status": "ok", "service": "SmartCookie"}
 
 
 class FindVideoRequest(BaseModel):
@@ -237,41 +272,30 @@ def find_video(body: FindVideoRequest):
     if not items:
         raise HTTPException(status_code=404, detail="No videos found")
 
-    chosen_id = None
-    chosen_title = None
-    chosen_channel = None
-    transcript = None
-
+    results = []
     for item in items:
+        if len(results) >= 5:
+            break
         vid_id = item["id"]["videoId"]
         title = item["snippet"]["title"]
-        logger.info(f"Trying transcript for: {vid_id} | {title!r}")
-        t = fetch_transcript(vid_id)
-        if t:
-            chosen_id = vid_id
-            chosen_title = title
-            chosen_channel = item["snippet"]["channelTitle"]
-            transcript = t
-            logger.info(f"Transcript found for {vid_id} ({len(t)} entries)")
-            break
+        channel = item["snippet"]["channelTitle"]
+        logger.info(f"Processing: {vid_id} | {title!r}")
+        transcript = fetch_transcript(vid_id)
+        start = 0
+        if transcript:
+            logger.info(f"Transcript found ({len(transcript)} entries), finding timestamp")
+            start = best_timestamp(text, transcript)
+            logger.info(f"Best timestamp: {start}s")
         else:
             logger.info(f"No transcript for {vid_id}")
+        embed_url = f"https://www.youtube.com/embed/{vid_id}?start={start}&autoplay=1&rel=0"
+        results.append({"embed_url": embed_url, "title": title, "channel": channel})
 
-    if chosen_id is None:
-        item = items[0]
-        chosen_id = item["id"]["videoId"]
-        chosen_title = item["snippet"]["title"]
-        chosen_channel = item["snippet"]["channelTitle"]
-        logger.info(f"No transcript found for any video; falling back to top result: {chosen_id}")
+    if not results:
+        raise HTTPException(status_code=404, detail="No videos found")
 
-    start = 0
-    if transcript:
-        start = best_timestamp(text, transcript)
-        logger.info(f"Best timestamp: {start}s")
-
-    embed_url = f"https://www.youtube.com/embed/{chosen_id}?start={start}&autoplay=1&rel=0"
-    logger.info(f"Returning: {chosen_title!r} by {chosen_channel!r} | {embed_url}")
-    return {"embed_url": embed_url, "title": chosen_title, "channel": chosen_channel}
+    logger.info(f"Returning {len(results)} videos")
+    return {"videos": results}
 
 
 if __name__ == "__main__":
