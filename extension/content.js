@@ -468,8 +468,17 @@ function renderMyNotesView(panel) {
 
         const topicEl = document.createElement("div");
         topicEl.className = "tt-mynotes-topic";
-        topicEl.textContent = topic;
+        const topicText = document.createElement("span");
+        topicText.textContent = topic;
+        const arrow = document.createElement("span");
+        arrow.className = "tt-mynotes-topic-arrow";
+        arrow.textContent = "▶";
+        topicEl.appendChild(topicText);
+        topicEl.appendChild(arrow);
         section.appendChild(topicEl);
+
+        const entriesWrap = document.createElement("div");
+        entriesWrap.className = "tt-mynotes-entries";
 
         entries.forEach(entry => {
           const entryEl = document.createElement("div");
@@ -488,8 +497,12 @@ function renderMyNotesView(panel) {
             list.appendChild(li);
           });
           entryEl.appendChild(list);
-          section.appendChild(entryEl);
+          entriesWrap.appendChild(entryEl);
         });
+
+        section.appendChild(entriesWrap);
+
+        topicEl.addEventListener("click", () => section.classList.toggle("open"));
 
         content.appendChild(section);
       });

@@ -548,19 +548,19 @@
 
 /* ── My Notes view ── */
 .tt-mynotes-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  /* grid gives exact, reliable height distribution */
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tt-mynotes-content {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
+  overflow-y: scroll;
   padding: 10px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: block;
+  min-height: 0;
 }
 
 .tt-mynotes-empty {
@@ -575,6 +575,7 @@
   border: 1.5px solid #e8d9c4;
   border-radius: 8px;
   overflow: hidden;
+  margin-bottom: 12px;
 }
 
 .tt-mynotes-topic {
@@ -584,6 +585,33 @@
   font-size: 12.5px;
   color: #3d2b1f;
   border-bottom: 1px solid #e8d9c4;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+}
+
+.tt-mynotes-topic:hover {
+  background: #f5ede0;
+}
+
+.tt-mynotes-topic-arrow {
+  font-size: 10px;
+  color: #a07850;
+  transition: transform 0.2s ease;
+}
+
+.tt-mynotes-section.open .tt-mynotes-topic-arrow {
+  transform: rotate(90deg);
+}
+
+.tt-mynotes-entries {
+  display: none;
+}
+
+.tt-mynotes-section.open .tt-mynotes-entries {
+  display: block;
 }
 
 .tt-mynotes-entry {
