@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "TextTutor",
+  "name": "SmartCookie",
   "version": "1.0.0",
   "description": "Highlight any text and get an embedded video explanation at the right timestamp.",
   "permissions": ["activeTab"],
@@ -16,8 +16,24 @@
       "run_at": "document_idle"
     }
   ],
+  "icons": {
+    "16": "mainChip.png",
+    "48": "mainChip.png",
+    "128": "mainChip.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "TextTutor"
-  }
+    "default_title": "SmartCookie",
+    "default_icon": {
+      "16": "mainChip.png",
+      "48": "mainChip.png",
+      "128": "mainChip.png"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["mainChip.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

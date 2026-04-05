@@ -45,7 +45,7 @@ function showLoadingPanel(selectionRect) {
   const panel = createPanelShell();
   panel.innerHTML = `
     <div class="tt-header">
-      <span class="tt-logo">▶ TextTutor</span>
+      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
       <button class="tt-close" title="Close">✕</button>
     </div>
     <div class="tt-loading">
@@ -60,32 +60,124 @@ function showLoadingPanel(selectionRect) {
   makeDraggable(panel, panel.querySelector(".tt-header"));
 }
 
-function showVideoPanel(selectionRect, data) {
+function videoEmbedUrl(video) {
+  const noAutoplay = video.embed_url.replace(/[&?]autoplay=1/, "");
+  return noAutoplay + (noAutoplay.includes("?") ? "&" : "?") + "autoplay=1";
+}
+
+function videoThumbUrl(video) {
+  const match = video.embed_url.match(/embed\/([^?&]+)/);
+  return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : "";
+}
+
+function swapPanelBody(panel, el) {
+  panel.querySelector(".tt-body, .tt-video-list, .tt-notes-view").replaceWith(el);
+}
+
+function renderSingleView(panel, video, videos, text) {
+  const thumb = videoThumbUrl(video);
+  const body = document.createElement("div");
+  body.className = "tt-body";
+  body.innerHTML = `
+    <div class="tt-meta">
+      <div class="tt-title" title="${escapeAttr(video.title)}">${escapeHtml(video.title)}</div>
+      <div class="tt-channel">${escapeHtml(video.channel)}</div>
+    </div>
+    <div class="tt-thumb-wrap">
+      <img src="${escapeAttr(thumb)}" alt="Video thumbnail" />
+      <div class="tt-play-btn"></div>
+    </div>
+    <div class="tt-footer">
+      <button class="tt-show-more">Show more videos ▾</button>
+      <button class="tt-notes-btn">Notes</button>
+    </div>
+  `;
+
+  swapPanelBody(panel, body);
+
+  body.querySelector(".tt-thumb-wrap").addEventListener("click", () => {
+    const embedWrap = document.createElement("div");
+    embedWrap.className = "tt-embed-wrap";
+    embedWrap.innerHTML = `
+      <iframe
+        src="${escapeAttr(videoEmbedUrl(video))}"
+        class="tt-iframe"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowfullscreen
+        frameborder="0"
+      ></iframe>
+    `;
+    body.querySelector(".tt-thumb-wrap").replaceWith(embedWrap);
+  });
+
+  body.querySelector(".tt-show-more").addEventListener("click", () => renderListView(panel, videos, text));
+  body.querySelector(".tt-notes-btn").addEventListener("click", () => renderNotesView(panel, video, videos, text));
+}
+
+function renderListView(panel, videos, text) {
+  const list = document.createElement("div");
+  list.className = "tt-video-list";
+  list.innerHTML = videos.map((video, i) => `
+    <div class="tt-video-option" data-index="${i}">
+      <div class="tt-option-thumb">
+        <img src="${escapeAttr(videoThumbUrl(video))}" alt="thumbnail" />
+        <div class="tt-play-btn"></div>
+      </div>
+      <div class="tt-option-info">
+        <div class="tt-title">${escapeHtml(video.title)}</div>
+        <div class="tt-channel">${escapeHtml(video.channel)}</div>
+      </div>
+    </div>
+  `).join("");
+
+  swapPanelBody(panel, list);
+
+  list.querySelectorAll(".tt-video-option").forEach((el) => {
+    el.addEventListener("click", () => renderSingleView(panel, videos[parseInt(el.dataset.index)], videos, text));
+  });
+}
+
+function renderNotesView(panel, video, videos, text) {
+  const vidIdMatch = video.embed_url.match(/embed\/([^?&]+)/);
+  const videoId = vidIdMatch ? vidIdMatch[1] : "";
+
+  const view = document.createElement("div");
+  view.className = "tt-notes-view";
+  view.innerHTML = `
+    <div class="tt-notes-loading">
+      <div class="tt-spinner"></div>
+      <span>Generating notes…</span>
+    </div>
+  `;
+  swapPanelBody(panel, view);
+
+  chrome.runtime.sendMessage({ type: "GET_NOTES", text, video_id: videoId }, (response) => {
+    if (chrome.runtime.lastError || !response || response.error) {
+      view.innerHTML = `<div class="tt-error">Could not generate notes. Try again.</div>
+        <div class="tt-footer"><button class="tt-back-btn">← Back</button></div>`;
+    } else {
+      const bulletsHtml = response.data.bullets
+        .map(b => `<li>${escapeHtml(b)}</li>`)
+        .join("");
+      view.innerHTML = `
+        <ul class="tt-notes-list">${bulletsHtml}</ul>
+        <div class="tt-footer"><button class="tt-back-btn">← Back to video</button></div>
+      `;
+    }
+    view.querySelector(".tt-back-btn").addEventListener("click", () => renderSingleView(panel, video, videos, text));
+  });
+}
+
+function showVideoPanel(selectionRect, videos, text) {
   removePanel();
-
-  // Strip autoplay from the URL — we'll add it back only when user clicks play
-  const embedUrlNoAutoplay = data.embed_url.replace(/[&?]autoplay=1/, "");
-  const embedUrlWithAutoplay = embedUrlNoAutoplay + (embedUrlNoAutoplay.includes("?") ? "&" : "?") + "autoplay=1";
-
-  // Extract video ID for thumbnail
-  const vidIdMatch = embedUrlNoAutoplay.match(/embed\/([^?]+)/);
-  const vidId = vidIdMatch ? vidIdMatch[1] : null;
-  const thumbUrl = vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : "";
 
   const panel = createPanelShell();
   panel.innerHTML = `
     <div class="tt-header">
-      <span class="tt-logo">▶ TextTutor</span>
+      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
       <button class="tt-close" title="Close">✕</button>
     </div>
-    <div class="tt-meta">
-      <div class="tt-title" title="${escapeAttr(data.title)}">${escapeHtml(data.title)}</div>
-      <div class="tt-channel">${escapeHtml(data.channel)}</div>
-    </div>
-    <div class="tt-thumb-wrap">
-      <img src="${escapeAttr(thumbUrl)}" alt="Video thumbnail" />
-      <div class="tt-play-btn"></div>
-    </div>
+    <div class="tt-body"></div>
   `;
 
   positionPanel(panel, selectionRect);
@@ -93,22 +185,7 @@ function showVideoPanel(selectionRect, data) {
   panel.querySelector(".tt-close").addEventListener("click", removePanel);
   makeDraggable(panel, panel.querySelector(".tt-header"));
 
-  // On click, swap thumbnail for the iframe with autoplay
-  panel.querySelector(".tt-thumb-wrap").addEventListener("click", () => {
-    const thumbWrap = panel.querySelector(".tt-thumb-wrap");
-    const embedWrap = document.createElement("div");
-    embedWrap.className = "tt-embed-wrap";
-    embedWrap.innerHTML = `
-      <iframe
-        src="${escapeAttr(embedUrlWithAutoplay)}"
-        class="tt-iframe"
-        allow="autoplay; encrypted-media; picture-in-picture"
-        allowfullscreen
-        frameborder="0"
-      ></iframe>
-    `;
-    thumbWrap.replaceWith(embedWrap);
-  });
+  renderSingleView(panel, videos[0], videos, text);
 }
 
 function showErrorPanel(selectionRect, message) {
@@ -117,7 +194,7 @@ function showErrorPanel(selectionRect, message) {
   const panel = createPanelShell();
   panel.innerHTML = `
     <div class="tt-header">
-      <span class="tt-logo">▶ TextTutor</span>
+      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
       <button class="tt-close" title="Close">✕</button>
     </div>
     <div class="tt-error">${escapeHtml(message)}</div>
@@ -192,14 +269,14 @@ function positionPanel(panel, selectionRect) {
 async function fetchVideo(text, selectionRect) {
   chrome.runtime.sendMessage({ type: "FIND_VIDEO", text }, (response) => {
     if (chrome.runtime.lastError || !response) {
-      showErrorPanel(selectionRect, "Could not reach TextTutor backend. Make sure it's running on port 5001.");
+      showErrorPanel(selectionRect, "Could not reach SmartCookie backend. Make sure it's running on port 5001.");
       return;
     }
     if (response.error) {
       showErrorPanel(selectionRect, response.error);
       return;
     }
-    showVideoPanel(selectionRect, response.data);
+    showVideoPanel(selectionRect, response.data.videos, text);
   });
 }
 
