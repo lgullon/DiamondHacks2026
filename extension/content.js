@@ -2,6 +2,32 @@ const PANEL_ID = "texttutor-panel";
 const MIN_CHARS = 20;   // ignore tiny selections
 const MAX_CHARS = 1500; // cap request size
 
+const CHIP_FRAMES = [
+  "mainChip.png",
+  "chipChomp1.png",
+  "chipChomp2.png",
+  "chipChomp3.png",
+  "chipChomp4.png",
+];
+
+function createChipAnim() {
+  const wrap = document.createElement("div");
+  wrap.className = "tt-chip-anim";
+  const img = document.createElement("img");
+  img.src = chrome.runtime.getURL("mainChip.png");
+  img.alt = "Loading...";
+  wrap.appendChild(img);
+
+  let frame = 0;
+  const interval = setInterval(() => {
+    frame = (frame + 1) % CHIP_FRAMES.length;
+    img.src = chrome.runtime.getURL(CHIP_FRAMES[frame]);
+  }, 300);
+
+  wrap._stopAnim = () => clearInterval(interval);
+  return wrap;
+}
+
 let debounceTimer = null;
 
 document.addEventListener("mouseup", (e) => {
@@ -49,15 +75,19 @@ function showLoadingPanel(selectionRect) {
       <button class="tt-close" title="Close">✕</button>
     </div>
     <div class="tt-loading">
-      <div class="tt-spinner"></div>
       <span>Finding the best explanation…</span>
     </div>
   `;
+
+  const chipAnim = createChipAnim();
+  const loading = panel.querySelector(".tt-loading");
+  loading.insertBefore(chipAnim, loading.firstChild);
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
   panel.querySelector(".tt-close").addEventListener("click", removePanel);
   makeDraggable(panel, panel.querySelector(".tt-header"));
+  makeResizable(panel);
 }
 
 function videoEmbedUrl(video) {
@@ -71,7 +101,10 @@ function videoThumbUrl(video) {
 }
 
 function swapPanelBody(panel, el) {
-  panel.querySelector(".tt-body, .tt-video-list, .tt-notes-view").replaceWith(el);
+  const videoCol = panel.querySelector(".tt-video-col");
+  const current = videoCol.firstElementChild;
+  if (current) current.replaceWith(el);
+  else videoCol.appendChild(el);
 }
 
 function renderSingleView(panel, video, videos, text) {
@@ -141,30 +174,80 @@ function renderNotesView(panel, video, videos, text) {
   const vidIdMatch = video.embed_url.match(/embed\/([^?&]+)/);
   const videoId = vidIdMatch ? vidIdMatch[1] : "";
 
-  const view = document.createElement("div");
-  view.className = "tt-notes-view";
-  view.innerHTML = `
-    <div class="tt-notes-loading">
-      <div class="tt-spinner"></div>
-      <span>Generating notes…</span>
-    </div>
-  `;
-  swapPanelBody(panel, view);
+  const notesCol = panel.querySelector(".tt-notes-col");
+
+  // Build the inner wrapper (holds all content, animates directionally)
+  notesCol.innerHTML = "";
+  const inner = document.createElement("div");
+  inner.className = "tt-notes-inner";
+  notesCol.appendChild(inner);
+
+  // Header
+  const colHeader = document.createElement("div");
+  colHeader.className = "tt-notes-col-header";
+  colHeader.textContent = "Chip's Notes";
+  inner.appendChild(colHeader);
+
+  // Loading state
+  const loadingDiv = document.createElement("div");
+  loadingDiv.className = "tt-notes-loading";
+  const chipAnim = createChipAnim();
+  const loadingText = document.createElement("span");
+  loadingText.textContent = "Generating notes…";
+  loadingDiv.appendChild(chipAnim);
+  loadingDiv.appendChild(loadingText);
+  inner.appendChild(loadingDiv);
+
+  // Slide open: expand panel + notes col together
+  const NOTES_WIDTH = 414;
+  panel.style.transition = "width 0.3s ease";
+  panel.style.width = (panel.offsetWidth + NOTES_WIDTH) + "px";
+  notesCol.classList.add("open");
+
+  function closeNotes() {
+    notesCol.classList.add("closing");
+    notesCol.classList.remove("open");
+    panel.style.transition = "width 0.3s ease";
+    panel.style.width = Math.max(300, panel.offsetWidth - NOTES_WIDTH) + "px";
+    setTimeout(() => {
+      notesCol.classList.remove("closing");
+      panel.style.transition = "none";
+      notesCol.innerHTML = "";
+    }, 300);
+  }
 
   chrome.runtime.sendMessage({ type: "GET_NOTES", text, video_id: videoId }, (response) => {
+    chipAnim._stopAnim();
+
+    // Clear loading, keep header
+    inner.innerHTML = "";
+    inner.appendChild(colHeader);
+
     if (chrome.runtime.lastError || !response || response.error) {
-      view.innerHTML = `<div class="tt-error">Could not generate notes. Try again.</div>
-        <div class="tt-footer"><button class="tt-back-btn">← Back</button></div>`;
+      const err = document.createElement("div");
+      err.className = "tt-error";
+      err.textContent = "Could not generate notes. Try again.";
+      inner.appendChild(err);
     } else {
-      const bulletsHtml = response.data.bullets
-        .map(b => `<li>${escapeHtml(b)}</li>`)
-        .join("");
-      view.innerHTML = `
-        <ul class="tt-notes-list">${bulletsHtml}</ul>
-        <div class="tt-footer"><button class="tt-back-btn">← Back to video</button></div>
-      `;
+      const list = document.createElement("ul");
+      list.className = "tt-notes-list";
+      response.data.bullets.forEach(b => {
+        const li = document.createElement("li");
+        li.textContent = b;
+        list.appendChild(li);
+      });
+      inner.appendChild(list);
     }
-    view.querySelector(".tt-back-btn").addEventListener("click", () => renderSingleView(panel, video, videos, text));
+
+    const footer = document.createElement("div");
+    footer.className = "tt-footer";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "tt-notes-btn";
+    closeBtn.textContent = "Close notes";
+    footer.appendChild(closeBtn);
+    inner.appendChild(footer);
+
+    closeBtn.addEventListener("click", closeNotes);
   });
 }
 
@@ -177,13 +260,19 @@ function showVideoPanel(selectionRect, videos, text) {
       <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
       <button class="tt-close" title="Close">✕</button>
     </div>
-    <div class="tt-body"></div>
+    <div class="tt-panel-row">
+      <div class="tt-video-col">
+        <div class="tt-body"></div>
+      </div>
+      <div class="tt-notes-col"></div>
+    </div>
   `;
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
   panel.querySelector(".tt-close").addEventListener("click", removePanel);
   makeDraggable(panel, panel.querySelector(".tt-header"));
+  makeResizable(panel);
 
   renderSingleView(panel, videos[0], videos, text);
 }
@@ -204,6 +293,38 @@ function showErrorPanel(selectionRect, message) {
   document.body.appendChild(panel);
   panel.querySelector(".tt-close").addEventListener("click", removePanel);
   makeDraggable(panel, panel.querySelector(".tt-header"));
+  makeResizable(panel);
+}
+
+function makeResizable(panel) {
+  const handle = document.createElement("div");
+  handle.className = "tt-resize-handle";
+  panel.appendChild(handle);
+
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = panel.offsetWidth;
+    const startH = panel.offsetHeight;
+
+    // Disable transitions while dragging so width/height track the mouse exactly
+    panel.style.transition = "none";
+
+    function onMouseMove(e) {
+      panel.style.width  = Math.max(300, startW + e.clientX - startX) + "px";
+      panel.style.height = Math.max(120, startH + e.clientY - startY) + "px";
+    }
+
+    function onMouseUp() {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup",   onMouseUp);
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup",   onMouseUp);
+  });
 }
 
 function makeDraggable(panel, handle) {

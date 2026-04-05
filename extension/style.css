@@ -12,9 +12,92 @@
   font-size: 15px;
   color: #1a202c;
   overflow: hidden;
-  resize: both;
+  display: flex;
+  flex-direction: column;
   /* Animate in */
   animation: tt-fadein 0.18s ease;
+}
+
+/* ── Resize handle ── */
+.tt-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 10;
+  background: linear-gradient(135deg, transparent 50%, rgba(61,43,31,0.25) 50%);
+  border-radius: 0 0 10px 0;
+}
+
+/* ── Two-column row ── */
+.tt-panel-row {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tt-video-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Outer container: animates layout width so video is never overlapped */
+.tt-notes-col {
+  flex: 0 0 auto;
+  width: 0;
+  overflow: hidden;
+  transition: width 0.3s ease;
+  display: flex;
+}
+
+.tt-notes-col.open {
+  width: 414px;
+}
+
+/* Inner wrapper: slides directionally inside the outer container */
+.tt-notes-inner {
+  width: 414px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fdf6ec;
+  border-left: 2px solid #e8d9c4;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+}
+
+.tt-notes-col.open .tt-notes-inner {
+  transform: translateX(0);
+}
+
+.tt-notes-col.closing .tt-notes-inner {
+  transform: translateX(-100%);
+}
+
+.tt-notes-inner .tt-notes-list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tt-notes-inner .tt-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid #e8d9c4;
+}
+
+.tt-notes-col-header {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #3d2b1f;
+  border-bottom: 1px solid #e8d9c4;
 }
 
 @keyframes tt-fadein {
@@ -67,24 +150,31 @@
 /* ── Loading ── */
 .tt-loading {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 10px;
   padding: 20px 16px;
   color: #4a5568;
+  font-size: 13px;
 }
 
-.tt-spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #e2e8f0;
-  border-top-color: #1a56db;
-  border-radius: 50%;
-  flex-shrink: 0;
-  animation: tt-spin 0.7s linear infinite;
+.tt-chip-anim img {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
 }
 
-@keyframes tt-spin {
-  to { transform: rotate(360deg); }
+/* ── Notes loading ── */
+.tt-notes-loading {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 16px;
+  color: #4a5568;
+  font-size: 13px;
 }
 
 /* ── Meta (title / channel) ── */
@@ -254,13 +344,6 @@
   flex-direction: column;
 }
 
-.tt-notes-loading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 20px 16px;
-  color: #4a5568;
-}
 
 .tt-notes-list {
   list-style: none;
@@ -269,14 +352,13 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 280px;
   overflow-y: auto;
 }
 
 .tt-notes-list li {
   position: relative;
-  padding-left: 14px;
-  font-size: 12.5px;
+  padding-left: 16px;
+  font-size: 14px;
   line-height: 1.55;
   color: #2d3748;
 }
@@ -285,7 +367,7 @@
   content: "•";
   position: absolute;
   left: 0;
-  color: #1a56db;
+  color: #3d2b1f;
   font-weight: 700;
 }
 

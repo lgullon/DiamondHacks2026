@@ -32,7 +32,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["mainChip.png"],
+      "resources": ["mainChip.png", "chipChomp1.png", "chipChomp2.png", "chipChomp3.png", "chipChomp4.png"],
       "matches": ["<all_urls>"]
     }
   ]
