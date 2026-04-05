@@ -213,6 +213,55 @@ def best_timestamp(text: str, transcript: list) -> int:
         return 0
 
 
+class QuizRequest(BaseModel):
+    text: str
+    video_id: str
+
+
+@app.post("/api/quiz")
+def get_quiz(body: QuizRequest):
+    transcript = fetch_transcript(body.video_id)
+    transcript_section = ""
+    if transcript:
+        transcript_text = " ".join(e["text"] for e in transcript[:300])
+        transcript_section = f"\n\nFor additional context, here is part of a video transcript on this topic:\n{transcript_text}"
+
+    char_count = len(body.text)
+    if char_count < 200:
+        n_questions = 3
+    elif char_count < 600:
+        n_questions = 5
+    else:
+        n_questions = 8
+
+    message = claude.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        temperature=0,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f'A student highlighted this passage:\n"{body.text}"'
+                    f"{transcript_section}\n\n"
+                    f"Generate exactly {n_questions} multiple-choice questions to test understanding "
+                    f"of the passage. Base questions heavily on the passage and lightly on the video. "
+                    f"Return ONLY valid JSON in this exact format, no other text:\n"
+                    f'{{"questions":[{{"question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"answer":"A"}}]}}'
+                ),
+            }
+        ],
+    )
+    import json as _json
+    raw = message.content[0].text.strip()
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = "\n".join(raw.split("\n")[1:])
+        raw = raw.rsplit("```", 1)[0].strip()
+    data = _json.loads(raw)
+    return data
+
+
 class NotesRequest(BaseModel):
     text: str
     video_id: str

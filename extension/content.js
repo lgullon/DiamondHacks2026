@@ -29,24 +29,35 @@ function createChipAnim() {
 }
 
 let debounceTimer = null;
+let _lastMouseDownInPanel = false;
 
-document.addEventListener("mouseup", (e) => {
-  // Ignore clicks inside the panel itself
+// Track whether the user clicked inside our panel so we never close it
+// just because the click cleared the page text selection.
+document.addEventListener("mousedown", (e) => {
   const panel = document.getElementById(PANEL_ID);
-  if (panel && panel.contains(e.target)) return;
+  _lastMouseDownInPanel = !!(panel && panel.contains(e.target));
+}, true);
 
+document.addEventListener("selectionchange", () => {
   clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => handleSelection(), 300);
+  debounceTimer = setTimeout(() => handleSelection(), 1000);
 });
 
 function handleSelection() {
   const selection = window.getSelection();
   if (!selection) return;
 
+  // Never react to selections made inside our panel (e.g. reading bullet points)
+  const panel = document.getElementById(PANEL_ID);
+  if (panel && selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    if (panel.contains(range.commonAncestorContainer)) return;
+  }
+
   const text = selection.toString().trim();
   if (text.length < MIN_CHARS) {
-    // Small or empty selection — close any open panel
-    removePanel();
+    // Small or empty selection — only close if the user clicked outside the panel
+    if (!_lastMouseDownInPanel) removePanel();
     return;
   }
 
@@ -123,6 +134,7 @@ function renderSingleView(panel, video, videos, text) {
     <div class="tt-footer">
       <button class="tt-show-more">Show more videos ▾</button>
       <button class="tt-notes-btn">Notes</button>
+      <button class="tt-quiz-btn">Quiz</button>
     </div>
   `;
 
@@ -145,6 +157,7 @@ function renderSingleView(panel, video, videos, text) {
 
   body.querySelector(".tt-show-more").addEventListener("click", () => renderListView(panel, videos, text));
   body.querySelector(".tt-notes-btn").addEventListener("click", () => renderNotesView(panel, video, videos, text));
+  body.querySelector(".tt-quiz-btn").addEventListener("click", () => renderQuizView(panel, video, videos, text));
 }
 
 function renderListView(panel, videos, text) {
@@ -248,6 +261,110 @@ function renderNotesView(panel, video, videos, text) {
     inner.appendChild(footer);
 
     closeBtn.addEventListener("click", closeNotes);
+  });
+}
+
+function renderQuizView(panel, video, videos, text) {
+  const vidIdMatch = video.embed_url.match(/embed\/([^?&]+)/);
+  const videoId = vidIdMatch ? vidIdMatch[1] : "";
+
+  const view = document.createElement("div");
+  view.className = "tt-quiz-view";
+
+  const header = document.createElement("div");
+  header.className = "tt-quiz-header";
+  header.textContent = "Chip's Quiz";
+  view.appendChild(header);
+
+  const loadingDiv = document.createElement("div");
+  loadingDiv.className = "tt-loading";
+  const chipAnim = createChipAnim();
+  const loadingText = document.createElement("span");
+  loadingText.textContent = "Generating quiz…";
+  loadingDiv.appendChild(chipAnim);
+  loadingDiv.appendChild(loadingText);
+  view.appendChild(loadingDiv);
+
+  swapPanelBody(panel, view);
+
+  chrome.runtime.sendMessage({ type: "GET_QUIZ", text, video_id: videoId }, (response) => {
+    chipAnim._stopAnim();
+    view.innerHTML = "";
+    view.appendChild(header);
+
+    if (chrome.runtime.lastError || !response || response.error) {
+      const err = document.createElement("div");
+      err.className = "tt-error";
+      err.textContent = "Could not generate quiz. Try again.";
+      view.appendChild(err);
+    } else {
+      const questions = response.data.questions || [];
+      let score = 0;
+      let answered = 0;
+
+      const questionsWrap = document.createElement("div");
+      questionsWrap.className = "tt-quiz-questions";
+
+      const scoreEl = document.createElement("div");
+      scoreEl.className = "tt-quiz-score";
+      scoreEl.textContent = `Score: 0 / ${questions.length}`;
+
+      questions.forEach((q, qi) => {
+        const qEl = document.createElement("div");
+        qEl.className = "tt-quiz-question";
+
+        const qText = document.createElement("p");
+        qText.className = "tt-quiz-q-text";
+        qText.textContent = `${qi + 1}. ${q.question}`;
+        qEl.appendChild(qText);
+
+        const optsEl = document.createElement("div");
+        optsEl.className = "tt-quiz-options";
+
+        q.options.forEach((opt) => {
+          const letter = opt.charAt(0);
+          const optEl = document.createElement("div");
+          optEl.className = "tt-quiz-option";
+          optEl.textContent = opt;
+
+          optEl.addEventListener("click", () => {
+            if (qEl.dataset.answered) return;
+            qEl.dataset.answered = "1";
+            answered++;
+
+            if (letter === q.answer) {
+              optEl.classList.add("correct");
+              score++;
+            } else {
+              optEl.classList.add("incorrect");
+              // highlight the correct one
+              optsEl.querySelectorAll(".tt-quiz-option").forEach((o) => {
+                if (o.textContent.charAt(0) === q.answer) o.classList.add("correct");
+              });
+            }
+            scoreEl.textContent = `Score: ${score} / ${questions.length}`;
+          });
+
+          optsEl.appendChild(optEl);
+        });
+
+        qEl.appendChild(optsEl);
+        questionsWrap.appendChild(qEl);
+      });
+
+      view.appendChild(questionsWrap);
+      view.appendChild(scoreEl);
+    }
+
+    const footer = document.createElement("div");
+    footer.className = "tt-footer";
+    const backBtn = document.createElement("button");
+    backBtn.className = "tt-back-btn";
+    backBtn.textContent = "← Back to video";
+    footer.appendChild(backBtn);
+    view.appendChild(footer);
+
+    backBtn.addEventListener("click", () => renderSingleView(panel, video, videos, text));
   });
 }
 
