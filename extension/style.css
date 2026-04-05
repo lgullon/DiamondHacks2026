@@ -596,6 +596,27 @@
   background: #f5ede0;
 }
 
+.tt-mynotes-topic-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tt-mynotes-delete-btn {
+  background: none;
+  border: none;
+  color: #a07850;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.tt-mynotes-delete-btn:hover {
+  color: #c0392b;
+}
+
 .tt-mynotes-topic-arrow {
   font-size: 10px;
   color: #a07850;
