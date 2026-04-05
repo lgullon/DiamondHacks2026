@@ -97,12 +97,11 @@ function handleSelection() {
     if (panel.contains(range.commonAncestorContainer)) return;
   }
 
+  // If a panel is already open, never interfere with it
+  if (document.getElementById(PANEL_ID)) return;
+
   const text = selection.toString().trim();
-  if (text.length < MIN_CHARS) {
-    // Small or empty selection — only close if the user clicked outside the panel
-    if (!_lastMouseDownInPanel) removePanel();
-    return;
-  }
+  if (text.length < MIN_CHARS) return;
 
   const clipped = text.slice(0, MAX_CHARS);
   const range = selection.getRangeAt(0);
@@ -226,6 +225,9 @@ function renderNotesView(panel, video, videos, text) {
   const videoId = vidIdMatch ? vidIdMatch[1] : "";
 
   const notesCol = panel.querySelector(".tt-notes-col");
+
+  // If notes are already open, do nothing
+  if (notesCol.classList.contains("open")) return;
 
   // Build the inner wrapper (holds all content, animates directionally)
   notesCol.innerHTML = "";
