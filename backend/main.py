@@ -138,6 +138,7 @@ def generate_search_query(text: str) -> str:
     message = claude.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=32,
+        temperature=0,
         messages=[
             {
                 "role": "user",
@@ -193,6 +194,7 @@ def best_timestamp(text: str, transcript: list) -> int:
     message = claude.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=16,
+        temperature=0,
         messages=[
             {
                 "role": "user",
@@ -228,6 +230,7 @@ def get_notes(body: NotesRequest):
     message = claude.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=512,
+        temperature=0,
         messages=[
             {
                 "role": "user",
