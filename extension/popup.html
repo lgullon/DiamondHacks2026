@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TextTutor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 260px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1a202c;
+    }
+
+    .header {
+      background: #1a56db;
+      color: white;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .header-text h1 {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+
+    .body {
+      padding: 14px 16px;
+    }
+
+    .instruction {
+      font-size: 12.5px;
+      color: #4a5568;
+      line-height: 1.55;
+    }
+
+    .instruction strong {
+      color: #1a202c;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 12px 0;
+    }
+
+    .tip {
+      font-size: 11px;
+      color: #718096;
+      line-height: 1.5;
+    }
+
+    .tip-label {
+      font-weight: 600;
+      color: #4a5568;
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status.checking {
+      background: #ebf4ff;
+      color: #2b6cb0;
+    }
+
+    .status.ok {
+      background: #f0fff4;
+      color: #276749;
+    }
+
+    .status.error {
+      background: #fff5f5;
+      color: #c53030;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-yellow { background: #f6ad55; }
+    .dot-green  { background: #48bb78; }
+    .dot-red    { background: #fc8181; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">▶</div>
+    <div class="header-text">
+      <h1>TextTutor</h1>
+      <p>Video explanations on demand</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <p class="instruction">
+      <strong>Highlight any text</strong> on a webpage and release the mouse.
+      A video explanation will appear next to your selection.
+    </p>
+
+    <hr class="divider" />
+
+    <p class="tip">
+      <span class="tip-label">Tip:</span> Works best with textbook concepts,
+      definitions, and scientific terms. Select at least a phrase
+      (20+ characters).
+    </p>
+
+    <div id="status" class="status checking">
+      <div class="dot dot-yellow"></div>
+      <span>Checking backend…</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

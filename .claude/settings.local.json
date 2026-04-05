@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm create:*)"
+      "Bash(curl -s http://localhost:5001/)"
     ]
   }
 }

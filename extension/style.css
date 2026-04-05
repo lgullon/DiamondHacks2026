@@ -1,0 +1,121 @@
+#texttutor-panel {
+  position: absolute;
+  z-index: 2147483647;
+  width: 360px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.10);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #1a202c;
+  overflow: hidden;
+  /* Animate in */
+  animation: tt-fadein 0.18s ease;
+}
+
+@keyframes tt-fadein {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header ── */
+.tt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #1a56db;
+  color: #ffffff;
+}
+
+.tt-logo {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.tt-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.tt-close:hover {
+  color: #ffffff;
+}
+
+/* ── Loading ── */
+.tt-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 16px;
+  color: #4a5568;
+}
+
+.tt-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #1a56db;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: tt-spin 0.7s linear infinite;
+}
+
+@keyframes tt-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Meta (title / channel) ── */
+.tt-meta {
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid #f0f4f8;
+}
+
+.tt-title {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: #1a202c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tt-channel {
+  font-size: 11px;
+  color: #718096;
+  margin-top: 2px;
+}
+
+/* ── Embed ── */
+.tt-embed-wrap {
+  position: relative;
+  width: 100%;
+  /* 16:9 aspect ratio */
+  padding-top: 56.25%;
+}
+
+.tt-iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* ── Error ── */
+.tt-error {
+  padding: 16px;
+  color: #c53030;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
