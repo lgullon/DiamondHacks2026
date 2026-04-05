@@ -57,10 +57,20 @@ function showLoadingPanel(selectionRect) {
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
   panel.querySelector(".tt-close").addEventListener("click", removePanel);
+  makeDraggable(panel, panel.querySelector(".tt-header"));
 }
 
 function showVideoPanel(selectionRect, data) {
   removePanel();
+
+  // Strip autoplay from the URL — we'll add it back only when user clicks play
+  const embedUrlNoAutoplay = data.embed_url.replace(/[&?]autoplay=1/, "");
+  const embedUrlWithAutoplay = embedUrlNoAutoplay + (embedUrlNoAutoplay.includes("?") ? "&" : "?") + "autoplay=1";
+
+  // Extract video ID for thumbnail
+  const vidIdMatch = embedUrlNoAutoplay.match(/embed\/([^?]+)/);
+  const vidId = vidIdMatch ? vidIdMatch[1] : null;
+  const thumbUrl = vidId ? `https://img.youtube.com/vi/${vidId}/hqdefault.jpg` : "";
 
   const panel = createPanelShell();
   panel.innerHTML = `
@@ -72,20 +82,33 @@ function showVideoPanel(selectionRect, data) {
       <div class="tt-title" title="${escapeAttr(data.title)}">${escapeHtml(data.title)}</div>
       <div class="tt-channel">${escapeHtml(data.channel)}</div>
     </div>
-    <div class="tt-embed-wrap">
-      <iframe
-        src="${escapeAttr(data.embed_url)}"
-        class="tt-iframe"
-        allow="autoplay; encrypted-media; picture-in-picture"
-        allowfullscreen
-        frameborder="0"
-      ></iframe>
+    <div class="tt-thumb-wrap">
+      <img src="${escapeAttr(thumbUrl)}" alt="Video thumbnail" />
+      <div class="tt-play-btn"></div>
     </div>
   `;
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
   panel.querySelector(".tt-close").addEventListener("click", removePanel);
+  makeDraggable(panel, panel.querySelector(".tt-header"));
+
+  // On click, swap thumbnail for the iframe with autoplay
+  panel.querySelector(".tt-thumb-wrap").addEventListener("click", () => {
+    const thumbWrap = panel.querySelector(".tt-thumb-wrap");
+    const embedWrap = document.createElement("div");
+    embedWrap.className = "tt-embed-wrap";
+    embedWrap.innerHTML = `
+      <iframe
+        src="${escapeAttr(embedUrlWithAutoplay)}"
+        class="tt-iframe"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowfullscreen
+        frameborder="0"
+      ></iframe>
+    `;
+    thumbWrap.replaceWith(embedWrap);
+  });
 }
 
 function showErrorPanel(selectionRect, message) {
@@ -103,6 +126,37 @@ function showErrorPanel(selectionRect, message) {
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
   panel.querySelector(".tt-close").addEventListener("click", removePanel);
+  makeDraggable(panel, panel.querySelector(".tt-header"));
+}
+
+function makeDraggable(panel, handle) {
+  let startX, startY, startLeft, startTop;
+
+  handle.style.cursor = "grab";
+
+  handle.addEventListener("mousedown", (e) => {
+    if (e.target.classList.contains("tt-close")) return;
+    e.preventDefault();
+    startX = e.clientX;
+    startY = e.clientY;
+    startLeft = parseInt(panel.style.left, 10) || 0;
+    startTop  = parseInt(panel.style.top,  10) || 0;
+    handle.style.cursor = "grabbing";
+
+    function onMouseMove(e) {
+      panel.style.left = (startLeft + e.clientX - startX) + "px";
+      panel.style.top  = (startTop  + e.clientY - startY) + "px";
+    }
+
+    function onMouseUp() {
+      handle.style.cursor = "grab";
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  });
 }
 
 function createPanelShell() {
