@@ -470,12 +470,28 @@ function renderMyNotesView(panel) {
         topicEl.className = "tt-mynotes-topic";
         const topicText = document.createElement("span");
         topicText.textContent = topic;
+        const rightCluster = document.createElement("span");
+        rightCluster.className = "tt-mynotes-topic-right";
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "tt-mynotes-delete-btn";
+        deleteBtn.textContent = "✕";
+        deleteBtn.title = "Delete these notes";
         const arrow = document.createElement("span");
         arrow.className = "tt-mynotes-topic-arrow";
         arrow.textContent = "▶";
+        rightCluster.appendChild(deleteBtn);
+        rightCluster.appendChild(arrow);
         topicEl.appendChild(topicText);
-        topicEl.appendChild(arrow);
+        topicEl.appendChild(rightCluster);
         section.appendChild(topicEl);
+
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation(); // don't toggle the section open/closed
+          chrome.storage.local.get({ smartcookie_notes: [] }, (result) => {
+            const filtered = result.smartcookie_notes.filter(n => n.topic !== topic);
+            chrome.storage.local.set({ smartcookie_notes: filtered }, () => section.remove());
+          });
+        });
 
         const entriesWrap = document.createElement("div");
         entriesWrap.className = "tt-mynotes-entries";
