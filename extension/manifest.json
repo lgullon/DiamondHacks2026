@@ -3,7 +3,7 @@
   "name": "SmartCookie",
   "version": "1.0.0",
   "description": "Highlight any text and get an embedded video explanation at the right timestamp.",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "storage"],
   "host_permissions": ["http://localhost:5001/*"],
   "background": {
     "service_worker": "background.js"

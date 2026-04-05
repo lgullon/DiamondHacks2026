@@ -11,6 +11,37 @@ const LOADING_PHRASES = [
 function randomLoadingPhrase() {
   return LOADING_PHRASES[Math.floor(Math.random() * LOADING_PHRASES.length)];
 }
+
+// ── Shared header HTML ─────────────────────────────────────────────────────
+
+function headerHTML() {
+  return `
+    <div class="tt-header">
+      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
+      <div class="tt-header-right">
+        <button class="tt-mynotes-btn">My Notes</button>
+        <button class="tt-close" title="Close">✕</button>
+      </div>
+    </div>
+  `;
+}
+
+function wireHeader(panel) {
+  panel.querySelector(".tt-close").addEventListener("click", removePanel);
+  panel.querySelector(".tt-mynotes-btn").addEventListener("click", () => renderMyNotesView(panel));
+  makeDraggable(panel, panel.querySelector(".tt-header"));
+  makeResizable(panel);
+}
+
+// ── Notes storage ──────────────────────────────────────────────────────────
+
+function saveNotes(topic, bullets) {
+  chrome.storage.local.get({ smartcookie_notes: [] }, (result) => {
+    const notes = result.smartcookie_notes;
+    notes.unshift({ id: Date.now(), topic, bullets, savedAt: new Date().toLocaleDateString() });
+    chrome.storage.local.set({ smartcookie_notes: notes });
+  });
+}
 const MIN_CHARS = 20;   // ignore tiny selections
 const MAX_CHARS = 1500; // cap request size
 
@@ -93,10 +124,7 @@ function showLoadingPanel(selectionRect) {
 
   const panel = createPanelShell();
   panel.innerHTML = `
-    <div class="tt-header">
-      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
-      <button class="tt-close" title="Close">✕</button>
-    </div>
+    ${headerHTML()}
     <div class="tt-loading">
       <span>${randomLoadingPhrase()}</span>
     </div>
@@ -108,9 +136,7 @@ function showLoadingPanel(selectionRect) {
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
-  panel.querySelector(".tt-close").addEventListener("click", removePanel);
-  makeDraggable(panel, panel.querySelector(".tt-header"));
-  makeResizable(panel);
+  wireHeader(panel);
 }
 
 function videoEmbedUrl(video) {
@@ -266,13 +292,28 @@ function renderNotesView(panel, video, videos, text) {
 
     const footer = document.createElement("div");
     footer.className = "tt-footer";
+
     const closeBtn = document.createElement("button");
     closeBtn.className = "tt-notes-btn";
     closeBtn.textContent = "Close notes";
     footer.appendChild(closeBtn);
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "tt-save-notes-btn";
+    saveBtn.textContent = "Save notes";
+    footer.appendChild(saveBtn);
+
     inner.appendChild(footer);
 
     closeBtn.addEventListener("click", closeNotes);
+
+    saveBtn.addEventListener("click", () => {
+      if (saveBtn.classList.contains("saved")) return;
+      const bullets = response && response.data ? response.data.bullets : [];
+      saveNotes(video.title, bullets);
+      saveBtn.textContent = "Saved!";
+      saveBtn.classList.add("saved");
+    });
   });
 }
 
@@ -385,15 +426,103 @@ function renderQuizView(panel, video, videos, text) {
   });
 }
 
+function renderMyNotesView(panel) {
+  const panelRow = panel.querySelector(".tt-panel-row");
+
+  // If My Notes is already open, do nothing
+  if (panel.querySelector(".tt-mynotes-view")) return;
+
+  // Preserve current height so the panel doesn't collapse
+  panel.style.height = Math.max(300, panel.offsetHeight) + "px";
+
+  chrome.storage.local.get({ smartcookie_notes: [] }, (result) => {
+    const allNotes = result.smartcookie_notes;
+
+    const view = document.createElement("div");
+    view.className = "tt-mynotes-view";
+
+    const header = document.createElement("div");
+    header.className = "tt-quiz-header";
+    header.textContent = "My Saved Notes";
+    view.appendChild(header);
+
+    const content = document.createElement("div");
+    content.className = "tt-mynotes-content";
+
+    if (allNotes.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "tt-mynotes-empty";
+      empty.textContent = "No saved notes yet. Generate notes on any highlighted text and click \"Save notes\" to keep them here.";
+      content.appendChild(empty);
+    } else {
+      // Group by topic (video title)
+      const grouped = {};
+      allNotes.forEach(entry => {
+        if (!grouped[entry.topic]) grouped[entry.topic] = [];
+        grouped[entry.topic].push(entry);
+      });
+
+      Object.entries(grouped).forEach(([topic, entries]) => {
+        const section = document.createElement("div");
+        section.className = "tt-mynotes-section";
+
+        const topicEl = document.createElement("div");
+        topicEl.className = "tt-mynotes-topic";
+        topicEl.textContent = topic;
+        section.appendChild(topicEl);
+
+        entries.forEach(entry => {
+          const entryEl = document.createElement("div");
+          entryEl.className = "tt-mynotes-entry";
+
+          const dateEl = document.createElement("div");
+          dateEl.className = "tt-mynotes-date";
+          dateEl.textContent = entry.savedAt;
+          entryEl.appendChild(dateEl);
+
+          const list = document.createElement("ul");
+          list.className = "tt-mynotes-bullets";
+          entry.bullets.forEach(b => {
+            const li = document.createElement("li");
+            li.textContent = b;
+            list.appendChild(li);
+          });
+          entryEl.appendChild(list);
+          section.appendChild(entryEl);
+        });
+
+        content.appendChild(section);
+      });
+    }
+
+    view.appendChild(content);
+
+    const footer = document.createElement("div");
+    footer.className = "tt-footer";
+    const backBtn = document.createElement("button");
+    backBtn.className = "tt-back-btn";
+    backBtn.textContent = "← Back";
+    footer.appendChild(backBtn);
+    view.appendChild(footer);
+
+    // Replace the entire panel row so My Notes spans the full width
+    if (panelRow) {
+      panelRow.replaceWith(view);
+      backBtn.addEventListener("click", () => view.replaceWith(panelRow));
+    } else {
+      // Fallback for loading panel (no panel row yet)
+      panel.appendChild(view);
+      backBtn.addEventListener("click", () => view.remove());
+    }
+  });
+}
+
 function showVideoPanel(selectionRect, videos, text) {
   removePanel();
 
   const panel = createPanelShell();
   panel.innerHTML = `
-    <div class="tt-header">
-      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
-      <button class="tt-close" title="Close">✕</button>
-    </div>
+    ${headerHTML()}
     <div class="tt-panel-row">
       <div class="tt-video-col">
         <div class="tt-body"></div>
@@ -404,9 +533,7 @@ function showVideoPanel(selectionRect, videos, text) {
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
-  panel.querySelector(".tt-close").addEventListener("click", removePanel);
-  makeDraggable(panel, panel.querySelector(".tt-header"));
-  makeResizable(panel);
+  wireHeader(panel);
 
   renderSingleView(panel, videos[0], videos, text);
 }
@@ -416,18 +543,13 @@ function showErrorPanel(selectionRect, message) {
 
   const panel = createPanelShell();
   panel.innerHTML = `
-    <div class="tt-header">
-      <span class="tt-logo"><img src="${chrome.runtime.getURL('mainChip.png')}" alt="Chip" />SmartCookie</span>
-      <button class="tt-close" title="Close">✕</button>
-    </div>
+    ${headerHTML()}
     <div class="tt-error">${escapeHtml(message)}</div>
   `;
 
   positionPanel(panel, selectionRect);
   document.body.appendChild(panel);
-  panel.querySelector(".tt-close").addEventListener("click", removePanel);
-  makeDraggable(panel, panel.querySelector(".tt-header"));
-  makeResizable(panel);
+  wireHeader(panel);
 }
 
 function makeResizable(panel) {
